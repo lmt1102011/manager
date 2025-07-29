@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+
+  <title>Danh sách đặt coin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/pouchdb@9.0.0/dist/pouchdb.min.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #f7f9fc;
+      padding: 30px;
+    }
+    h2 {
+      color: #1f66cc;
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    th, td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #eee;
+      text-align: left;
+    }
+    th {
+      background: #eaf4ff;
+      color: #333;
+    }
+    button {
+      padding: 10px 16px;
+      font-weight: 600;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    button:nth-child(1) {
+      background: #28a745; color: white;
+    }
+
+    button:nth-child(2) {
+      background: #dc3545; color: white;
+    }
+
+    .actions {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>📋 Danh sách người đặt coin</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Tên người dùng</th>
+        <th>Số tiền</th>
+        <th>Thời gian</th>
+      </tr>
+    </thead>
+    <tbody id="logTable"></tbody>
+  </table>
+
+  <div class="actions">
+    <button onclick="handleWin()">✅ Thắng</button>
+    <button onclick="handleLose()">❌ Thua</button>
+  </div>
+
+  <script>
+    const db = new PouchDB("users_db");
+
+    async function renderOrderList() {
+      const container = document.getElementById("logTable");
+      container.innerHTML = "";
+
+      const logs = await db.allDocs({
+        include_docs: true,
+        startkey: "log_",
+        endkey: "log_\ufff0"
+      });
+
+      for (const row of logs.rows) {
+        const { username, amount, timestamp } = row.doc;
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+          <td>${username}</td>
+          <td>${amount.toLocaleString()}₫</td>
+          <td>${new Date(timestamp).toLocaleString()}</td>
+        `;
+
+        container.appendChild(tr);
+      }
+    }
+
+    async function handleWin() {
+      const logs = await db.allDocs({ include_docs: true, startkey: "log_", endkey: "log_\ufff0" });
+
+      for (const row of logs.rows) {
+        const log = row.doc;
+        try {
+          const userDoc = await db.get("user_" + log.username);
+          userDoc.balance = (userDoc.balance || 0) + log.amount * 2;
+          await db.put(userDoc);
+          await db.remove(log);
+        } catch (err) {
+          console.error("Lỗi khi cộng tiền cho:", log.username);
+        }
+      }
+
+      alert("✅ Thắng: Đã cộng tiền và reset danh sách!");
+      renderOrderList();
+    }
+
+    async function handleLose() {
+      const logs = await db.allDocs({ include_docs: true, startkey: "log_", endkey: "log_\ufff0" });
+
+      for (const row of logs.rows) {
+        await db.remove(row.doc);
+      }
+
+      alert("❌ Thua: Đã reset danh sách!");
+      renderOrderList();
+    }
+
+    renderOrderList(); // Load lần đầu
+
+    db.changes({
+      since: 'now',
+      live: true,
+      include_docs: true
+    }).on('change', function(change) {
+      if (
+        (change.doc && change.doc._id.startsWith("log_")) ||
+        change.deleted
+      ) {
+        renderOrderList(); // Cập nhật khi có log mới hoặc bị xóa
+      }
+    });
+  </script>
+</body>
+</html>
